@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Habit Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2e2e2e;
+    --accent: #c8f55a;
+    --accent-dim: #a8d048;
+    --text: #f0ede6;
+    --text-muted: #7a7570;
+    --text-dim: #4a4845;
+    --red: #ff6b5b;
+    --amber: #ffb347;
+    --green: #c8f55a;
+    --blue: #7eb8f7;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { padding: 32px 32px 0; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+  .header-left h1 { font-family: 'DM Serif Display', serif; font-size: 42px; line-height: 1; color: var(--text); letter-spacing: -1px; }
+  .header-left .date { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-muted); margin-top: 6px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .score-bubble { background: var(--accent); color: #111; font-family: 'DM Serif Display', serif; font-size: 48px; width: 88px; height: 88px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; flex-shrink: 0; }
+  .score-bubble .score-label { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; color: #333; }
+
+  .nav { display: flex; gap: 4px; padding: 24px 32px 0; border-bottom: 1px solid var(--border); }
+  .nav-tab { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); background: none; border: none; padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* TOOLBAR */
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 32px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .toolbar-btn { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 13px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.12s; display: flex; align-items: center; gap: 6px; }
+  .toolbar-btn:hover { color: var(--text); border-color: #555; }
+  .toolbar-btn.save-btn { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 500; }
+  .toolbar-btn.save-btn:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .toolbar-btn.drive-connected { border-color: #34a853; color: #34a853; }
+  .toolbar-btn.drive-connected:hover { background: rgba(52,168,83,0.1); }
+  .toolbar-btn.drive-disconnected { border-color: var(--border); color: var(--text-dim); }
+  .toolbar-spacer { flex: 1; }
+  .save-toast { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent); opacity: 0; transition: opacity 0.3s; letter-spacing: 0.06em; }
+  .save-toast.show { opacity: 1; }
+
+  /* DATA DROPDOWN */
+  .dropdown-wrap { position: relative; }
+  .dropdown-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 180px; z-index: 50; overflow: hidden; }
+  .dropdown-menu.open { display: block; }
+  .dropdown-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); background: none; border: none; cursor: pointer; transition: all 0.1s; text-align: left; white-space: nowrap; }
+  .dropdown-item:hover { background: var(--surface2); color: var(--text); }
+  .dropdown-item.accent { color: var(--accent); }
+  .dropdown-item.accent:hover { background: rgba(200,245,90,0.06); }
+  .dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+  /* SYNC STATUS BAR */
+  .sync-bar { display: none; align-items: center; gap: 8px; padding: 8px 32px; background: rgba(52,168,83,0.06); border-bottom: 1px solid rgba(52,168,83,0.15); font-family: 'DM Mono', monospace; font-size: 11px; color: #34a853; letter-spacing: 0.06em; }
+  .sync-bar.visible { display: flex; }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #34a853; animation: pulse 2s infinite; flex-shrink: 0; }
+  .sync-dot.syncing { background: var(--amber); animation: pulse 0.6s infinite; }
+  .sync-dot.error { background: var(--red); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* CONTENT */
+  .content { padding: 28px 32px; max-width: 960px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* SECTION HEADERS */
+  .section-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; margin-top: 28px; }
+  .section-header:first-child { margin-top: 0; }
+  .section-title { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+  .section-line { flex: 1; height: 1px; background: var(--border); }
+  .section-count { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); }
+
+  /* HABIT ROWS */
+  .habit-list { display: flex; flex-direction: column; gap: 4px; }
+  .habit-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid transparent; cursor: pointer; transition: all 0.12s; user-select: none; }
+  .habit-row:hover { border-color: var(--border); background: var(--surface2); }
+  .habit-row.checked { background: rgba(200, 245, 90, 0.06); border-color: rgba(200, 245, 90, 0.18); }
+  .habit-row.checked .habit-name { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--text-dim); }
+  .check-box { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.12s; background: var(--bg); }
+  .habit-row.checked .check-box { background: var(--accent); border-color: var(--accent); }
+  .check-icon { display: none; width: 12px; height: 12px; }
+  .habit-row.checked .check-icon { display: block; }
+  .check-icon::before { content: ''; display: block; width: 12px; height: 12px; background: #111; mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6l3 3 5-5' stroke='%23111' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"); mask-repeat: no-repeat; mask-size: contain; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6l3 3 5-5' stroke='%23111' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"); -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; }
+  .habit-info { flex: 1; min-width: 0; }
+  .habit-name { font-size: 14px; font-weight: 400; color: var(--text); transition: color 0.12s; }
+  .habit-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .habit-tag { font-family: 'DM Mono', monospace; font-size: 10px; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.06em; flex-shrink: 0; }
+  .tag-daily { background: rgba(126, 184, 247, 0.12); color: var(--blue); }
+  .tag-weekly { background: rgba(255, 179, 71, 0.12); color: var(--amber); }
+
+  /* PROGRESS BAR */
+  .progress-bar-wrap { width: 60px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+  .progress-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.3s ease; }
+
+  /* DREAM */
+  .dream-slots { display: flex; flex-direction: column; gap: 4px; }
+  .dream-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid transparent; cursor: pointer; transition: all 0.12s; }
+  .dream-row:hover { border-color: var(--border); }
+  .dream-row.checked { background: rgba(200, 245, 90, 0.06); border-color: rgba(200, 245, 90, 0.18); }
+  .dream-row.checked .dream-label { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--text-dim); }
+  .dream-label { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-muted); transition: color 0.12s; }
+
+  /* WEEKLY */
+  .weekly-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .weekly-grid { grid-template-columns: 1fr; } }
+  .weekly-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--border); }
+  .weekly-card-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .weekly-card-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-bottom: 12px; }
+  .weekly-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .weekly-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .weekly-progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .fill-green { background: var(--green); }
+  .fill-amber { background: var(--amber); }
+  .fill-red { background: var(--red); }
+  .weekly-fraction { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: right; }
+  .weekly-dots { display: flex; gap: 4px; flex-wrap: wrap; }
+  .week-dot { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.1s; font-family: 'DM Mono', monospace; font-size: 8px; color: var(--text-dim); }
+  .week-dot:hover { border-color: var(--accent); }
+  .week-dot.filled { background: var(--accent); border-color: var(--accent); }
+  .week-dot.filled::after { content: '✓'; color: #111; font-size: 9px; }
+
+  /* STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border-radius: var(--radius-sm); padding: 14px 16px; border: 1px solid var(--border); }
+  .stat-value { font-family: 'DM Serif Display', serif; font-size: 32px; color: var(--text); line-height: 1; }
+  .stat-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-top: 6px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .stat-accent { color: var(--accent); }
+  .stat-amber { color: var(--amber); }
+  .stat-blue { color: var(--blue); }
+
+  /* HEATMAP */
+  .heatmap-wrap { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 1px solid var(--border); }
+  .heatmap-title { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px; }
+  .heatmap-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .heatmap-day-label { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); text-align: center; margin-bottom: 4px; letter-spacing: 0.06em; }
+  .heatmap-cell { aspect-ratio: 1; border-radius: 3px; background: var(--border); transition: background 0.2s; }
+  .heatmap-cell.h1 { background: rgba(200,245,90,0.2); }
+  .heatmap-cell.h2 { background: rgba(200,245,90,0.4); }
+  .heatmap-cell.h3 { background: rgba(200,245,90,0.65); }
+  .heatmap-cell.h4 { background: rgba(200,245,90,0.9); }
+
+  /* MODALS */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; padding: 24px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--text); margin-bottom: 6px; }
+  .modal-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.6; }
+  .modal textarea { width: 100%; height: 140px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px; padding: 12px; resize: vertical; outline: none; line-height: 1.5; }
+  .modal textarea:focus { border-color: #555; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+  .modal-btn { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--border); background: none; color: var(--text-muted); transition: all 0.12s; }
+  .modal-btn:hover { color: var(--text); border-color: #555; }
+  .modal-btn.primary { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 500; }
+  .modal-btn.primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .modal-error { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--red); margin-top: 8px; display: none; }
+
+  /* BACKUP LIST */
+  .backup-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; margin-top: 4px; }
+  .backup-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .backup-item-info { flex: 1; }
+  .backup-item-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .backup-item-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .backup-restore-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--text-muted); cursor: pointer; transition: all 0.1s; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+  .backup-restore-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* DRIVE CONNECT CARD */
+  .drive-connect-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 16px; }
+  .drive-connect-card.hidden { display: none; }
+  .drive-icon { width: 32px; height: 32px; flex-shrink: 0; }
+  .drive-card-text { flex: 1; }
+  .drive-card-title { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 3px; }
+  .drive-card-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); }
+
+  /* BANNER */
+  .today-banner { background: rgba(200, 245, 90, 0.06); border: 1px solid rgba(200, 245, 90, 0.15); border-radius: var(--radius-sm); padding: 10px 16px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 24px; }
+
+  /* RESET */
+  .reset-btn { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); background: none; border: 1px solid var(--border); padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.12s; margin-top: 24px; }
+  .reset-btn:hover { color: var(--red); border-color: var(--red); }
+  /* WORKOUT */
+  .workout-type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 24px; }
+  .workout-type-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 12px; cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .workout-type-btn:hover { border-color: #555; background: var(--surface2); }
+  .workout-type-btn.selected { border-color: var(--accent); background: rgba(200,245,90,0.06); }
+  .workout-type-icon { font-size: 28px; line-height: 1; }
+  .workout-type-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+  .workout-type-btn.selected .workout-type-label { color: var(--accent); }
+  .workout-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; }
+  .workout-selected-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .workout-selected-label span { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--text); }
+  .workout-clear-btn { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); background: none; border: none; cursor: pointer; letter-spacing: 0.06em; text-transform: uppercase; transition: color 0.1s; }
+  .workout-clear-btn:hover { color: var(--text-muted); }
+  .workout-field { margin-bottom: 16px; }
+  .workout-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 8px; }
+  .workout-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: 'DM Mono', monospace; font-size: 14px; padding: 10px 12px; outline: none; transition: border-color 0.1s; }
+  .workout-input:focus { border-color: #555; }
+  .workout-textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px 12px; outline: none; resize: vertical; min-height: 80px; transition: border-color 0.1s; }
+  .workout-textarea:focus { border-color: #555; }
+  .workout-rating { display: flex; gap: 8px; flex-wrap: wrap; }
+  .rating-btn { font-family: 'DM Sans', sans-serif; font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; cursor: pointer; color: var(--text-muted); transition: all 0.12s; }
+  .rating-btn:hover { border-color: #555; color: var(--text); }
+  .rating-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(200,245,90,0.06); }
+  .workout-log-btn { margin-top: 20px; width: 100%; background: var(--accent); border: none; border-radius: var(--radius-sm); color: #111; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 12px; cursor: pointer; transition: background 0.12s; }
+  .workout-log-btn:hover { background: var(--accent-dim); }
+  .workout-log-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; }
+  .workout-cal-status { font-family: 'DM Mono', monospace; font-size: 11px; margin-top: 12px; min-height: 18px; letter-spacing: 0.06em; }
+  .workout-cal-status.ok { color: #34a853; }
+  .workout-cal-status.err { color: var(--red); }
+  .workout-cal-status.info { color: var(--text-muted); }
+  .workout-history-item { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 6px; }
+  .workout-history-icon { font-size: 20px; flex-shrink: 0; }
+  .workout-history-info { flex: 1; }
+  .workout-history-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .workout-history-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+  .workout-history-empty { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-dim); padding: 16px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Habits</h1>
+    <div class="date" id="header-date"></div>
+  </div>
+  <div class="score-bubble">
+    <span id="score-num">0%</span>
+    <span class="score-label">today</span>
+  </div>
+</div>
+
+<div class="nav">
+  <button class="nav-tab active" onclick="showView('daily', event)">Today</button>
+  <button class="nav-tab" onclick="showView('weekly', event)">This Week</button>
+  <button class="nav-tab" onclick="showView('workout', event)">Workout</button>
+  <button class="nav-tab" onclick="showView('stats', event)">Stats</button>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="dropdown-wrap">
+    <button class="toolbar-btn" id="data-menu-btn" onclick="toggleDataMenu()">⋯ Data</button>
+    <div class="dropdown-menu" id="data-menu">
+      <button class="dropdown-item accent" onclick="saveBackup(false);closeDataMenu()">↓ Save &amp; Backup</button>
+      <div class="dropdown-divider"></div>
+      <button class="dropdown-item" onclick="openBackups();closeDataMenu()">⏱ View Backups</button>
+      <button class="dropdown-item" onclick="openExport();closeDataMenu()">↑ Export</button>
+      <button class="dropdown-item" onclick="openImport();closeDataMenu()">↓ Import</button>
+    </div>
+  </div>
+  <div class="toolbar-spacer"></div>
+  <span class="save-toast" id="save-toast"></span>
+  <button class="toolbar-btn drive-disconnected" id="drive-btn" onclick="toggleDrive()">⬡ Connect Drive</button>
+</div>
+
+<!-- SYNC STATUS BAR -->
+<div class="sync-bar" id="sync-bar">
+  <div class="sync-dot" id="sync-dot"></div>
+  <span id="sync-msg">Connected to Google Drive</span>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-export">
+  <div class="modal">
+    <div class="modal-title">Export data</div>
+    <div class="modal-sub">Copy this text and save it somewhere safe. Use it to restore your data if anything goes wrong.</div>
+    <textarea id="export-text" readonly onclick="this.select()"></textarea>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="copyExport()">Copy to clipboard</button>
+      <button class="modal-btn primary" onclick="closeModal('modal-export')">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-import">
+  <div class="modal">
+    <div class="modal-title">Import data</div>
+    <div class="modal-sub">Paste your previously exported data below. This will <strong style="color:var(--amber)">merge</strong> with your current data — existing entries won't be overwritten.</div>
+    <textarea id="import-text" placeholder="Paste exported data here..."></textarea>
+    <div class="modal-error" id="import-error">Invalid data — make sure you pasted the full export text.</div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('modal-import')">Cancel</button>
+      <button class="modal-btn primary" onclick="doImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-backups">
+  <div class="modal">
+    <div class="modal-title">Saved backups</div>
+    <div class="modal-sub">Up to 5 backups stored — locally and in Google Drive when connected. Oldest is replaced when full.</div>
+    <div class="backup-list" id="backup-list"></div>
+    <div class="modal-actions">
+      <button class="modal-btn primary" onclick="closeModal('modal-backups')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- DAILY VIEW -->
+  <div class="view active" id="view-daily">
+    <div id="today-banner" class="today-banner"></div>
+
+    <!-- Drive connect nudge (shows when not connected) -->
+    <div class="drive-connect-card" id="drive-connect-card">
+      <svg class="drive-icon" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+        <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+        <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+        <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+        <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+        <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+        <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+      </svg>
+      <div class="drive-card-text">
+        <div class="drive-card-title">Connect Google Drive for cross-device sync</div>
+        <div class="drive-card-sub">Your data will automatically sync across all your devices</div>
+      </div>
+      <button class="toolbar-btn" style="white-space:nowrap" onclick="toggleDrive()">Connect →</button>
+    </div>
+
+    <div class="section-header">
+      <span class="section-title">Daily</span>
+      <div class="section-line"></div>
+      <span class="section-count" id="daily-count">0/0</span>
+    </div>
+    <div class="habit-list" id="daily-list"></div>
+
+    <div class="section-header">
+      <span class="section-title">Morning Activity</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="habit-list" id="morning-list"></div>
+
+    <div class="section-header">
+      <span class="section-title">Dreams Recorded Today</span>
+      <div class="section-line"></div>
+      <span class="section-count" id="dream-count">0/3</span>
+    </div>
+    <div class="dream-slots" id="dream-slots"></div>
+
+    <div class="section-header" style="margin-top:32px;">
+      <span class="section-title">Weekly Goals</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="habit-list" id="weekly-daily-list"></div>
+
+    <button class="reset-btn" onclick="confirmReset()">↺ Reset today's check-ins</button>
+  </div>
+
+  <!-- WEEKLY VIEW -->
+  <div class="view" id="view-weekly">
+    <div class="weekly-grid" id="weekly-grid"></div>
+  </div>
+
+  <!-- STATS VIEW -->
+  <div class="view" id="view-stats">
+    <div class="stats-grid" id="stats-grid"></div>
+    <div class="heatmap-wrap">
+      <div class="heatmap-title">Daily compliance — last 28 days</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px;">
+        <div class="heatmap-day-label">S</div><div class="heatmap-day-label">M</div>
+        <div class="heatmap-day-label">T</div><div class="heatmap-day-label">W</div>
+        <div class="heatmap-day-label">T</div><div class="heatmap-day-label">F</div>
+        <div class="heatmap-day-label">S</div>
+      </div>
+      <div class="heatmap-grid" id="heatmap"></div>
+    </div>
+  </div>
+
+  <!-- WORKOUT VIEW -->
+  <div class="view" id="view-workout">
+
+    <div class="section-header" style="margin-top:0">
+      <span class="section-title">Log a workout</span>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="workout-type-grid" id="workout-type-grid"></div>
+
+    <div class="workout-form" id="workout-form" style="display:none">
+      <div class="workout-selected-label">
+        <span id="workout-selected-name"></span>
+        <button class="workout-clear-btn" onclick="clearWorkoutSelection()">✕ change</button>
+      </div>
+      <div class="workout-field">
+        <label class="workout-label">Duration (minutes)</label>
+        <input type="number" id="workout-duration" class="workout-input" placeholder="e.g. 45" min="1" max="300">
+      </div>
+      <div class="workout-field">
+        <label class="workout-label">Notes</label>
+        <textarea id="workout-notes" class="workout-textarea" placeholder="How did it go? Any details…"></textarea>
+      </div>
+      <div class="workout-field">
+        <label class="workout-label">How did it feel?</label>
+        <div class="workout-rating" id="workout-rating">
+          <button class="rating-btn" data-val="1" onclick="setRating(1)">😴 Easy</button>
+          <button class="rating-btn" data-val="2" onclick="setRating(2)">💪 Good</button>
+          <button class="rating-btn" data-val="3" onclick="setRating(3)">🔥 Crushed it</button>
+        </div>
+      </div>
+      <div id="workout-cal-status" class="workout-cal-status"></div>
+      <button class="workout-log-btn" onclick="logWorkout()">Log workout → Calendar</button>
+    </div>
+
+    <div class="section-header" style="margin-top:36px;">
+      <span class="section-title">Recent workouts</span>
+      <div class="section-line"></div>
+    </div>
+    <div id="workout-history"></div>
+
+  </div>
+
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CLIENT_ID = '652502517509-18ohotbeoumceehob9gc802n612bp7au.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar';
+const DRIVE_FILE_NAME = 'habit-tracker-data.json';
+const DRIVE_BACKUP_PREFIX = 'habit-tracker-backup-';
+const MAX_BACKUPS = 5;
+
+// ─── HABIT DEFINITIONS ────────────────────────────────────────────────────────
+const DAILY_HABITS = [
+  { id: 'no_phone_9pm',   name: 'No phone after 9pm',    meta: 'digital curfew' },
+  { id: 'in_bed_1030',    name: 'In bed by 10:30pm',     meta: 'sleep target' },
+  { id: 'awake_7am',      name: 'Awake by 7am',          meta: 'rise time' },
+  { id: 'active_session', name: 'Active session',        meta: 'at least once today' },
+  { id: 'screen_4hr',     name: 'Max 4 hrs screen time', meta: 'digital wellness' },
+];
+const MORNING_OPTIONS = [
+  { id: 'morning_yoga', name: 'Yoga' },
+  { id: 'morning_surf', name: 'Surf' },
+  { id: 'morning_gym',  name: 'Gym' },
+  { id: 'morning_bike', name: 'Bike' },
+  { id: 'morning_walk', name: 'Walk' },
+];
+const WEEKLY_HABITS = [
+  { id: 'cannabis_1wk',  name: 'Cannabis max 1×',         target: 1, meta: 'per week' },
+  { id: 'new_recipe',    name: 'Try 1 new recipe',         target: 1, meta: 'per week' },
+  { id: 'date_night',    name: 'Date night',               target: 1, meta: 'per week' },
+  { id: 'read_book',     name: 'Read 1 book',              target: 1, meta: 'per week' },
+  { id: 'creative_3hr',  name: '3 hrs creative learning',  target: 3, meta: 'chess / piano / poker (hrs)' },
+  { id: 'dreams_3wk',    name: '3 dreams recorded',        target: 3, meta: 'per week' },
+];
+
+// ─── LOCAL STATE ──────────────────────────────────────────────────────────────
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function weekKey() {
+  const d = new Date();
+  const jan1 = new Date(d.getFullYear(),0,1);
+  const week = Math.ceil(((d-jan1)/86400000 + jan1.getDay()+1)/7);
+  return `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+function getWeekOfDate(dateStr) {
+  const d = new Date(dateStr+'T12:00:00');
+  const jan1 = new Date(d.getFullYear(),0,1);
+  const week = Math.ceil(((d-jan1)/86400000 + jan1.getDay()+1)/7);
+  return `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+function loadState() {
+  try { return JSON.parse(localStorage.getItem('habits_state') || '{}'); } catch(e) { return {}; }
+}
+function saveState(state) {
+  localStorage.setItem('habits_state', JSON.stringify(state));
+  debouncedDriveSync();
+}
+function getDay(state, key) {
+  if (!state[key]) state[key] = { daily:{}, morning:null, dreams:[false,false,false] };
+  return state[key];
+}
+function getWeek(state, wkey) {
+  if (!state[wkey]) { const w={}; WEEKLY_HABITS.forEach(h=>w[h.id]=0); state[wkey]=w; }
+  return state[wkey];
+}
+
+// ─── GOOGLE DRIVE ─────────────────────────────────────────────────────────────
+let gAccessToken = null;
+let driveMainFileId = null;
+let syncDebounceTimer = null;
+let isSyncing = false;
+
+function loadTokenFromStorage() {
+  const saved = localStorage.getItem('gd_token');
+  if (!saved) return;
+  try {
+    const { token, expiry } = JSON.parse(saved);
+    if (Date.now() < expiry) { gAccessToken = token; updateDriveUI(); }
+    else { localStorage.removeItem('gd_token'); }
+  } catch(e) {}
+}
+
+function toggleDrive() {
+  if (gAccessToken) { disconnectDrive(); return; }
+  connectDrive();
+}
+
+function connectDrive() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { showToast('Drive auth failed'); return; }
+      gAccessToken = resp.access_token;
+      const expiry = Date.now() + (resp.expires_in - 60) * 1000;
+      localStorage.setItem('gd_token', JSON.stringify({ token: gAccessToken, expiry }));
+      updateDriveUI();
+      await syncWithDrive();
+      showToast('Drive connected ✓');
+    }
+  });
+  client.requestAccessToken();
+}
+
+function disconnectDrive() {
+  if (!confirm('Disconnect Google Drive? Your local data stays intact.')) return;
+  google.accounts.oauth2.revoke(gAccessToken, () => {});
+  gAccessToken = null;
+  driveMainFileId = null;
+  localStorage.removeItem('gd_token');
+  updateDriveUI();
+  showToast('Drive disconnected');
+}
+
+function updateDriveUI() {
+  const btn = document.getElementById('drive-btn');
+  const bar = document.getElementById('sync-bar');
+  const card = document.getElementById('drive-connect-card');
+  if (gAccessToken) {
+    btn.textContent = '⬡ Drive connected';
+    btn.className = 'toolbar-btn drive-connected';
+    bar.classList.add('visible');
+    card.classList.add('hidden');
+  } else {
+    btn.textContent = '⬡ Connect Drive';
+    btn.className = 'toolbar-btn drive-disconnected';
+    bar.classList.remove('visible');
+    card.classList.remove('hidden');
+  }
+}
+
+function setSyncStatus(status, msg) {
+  const dot = document.getElementById('sync-dot');
+  const msgEl = document.getElementById('sync-msg');
+  dot.className = 'sync-dot' + (status === 'syncing' ? ' syncing' : status === 'error' ? ' error' : '');
+  msgEl.textContent = msg;
+}
+
+function debouncedDriveSync() {
+  if (!gAccessToken) return;
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(() => syncWithDrive(), 2000);
+}
+
+async function driveRequest(method, url, body, extraHeaders={}) {
+  const headers = { Authorization: `Bearer ${gAccessToken}`, ...extraHeaders };
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(body);
+  }
+  const res = await fetch(url, { method, headers, body });
+  if (res.status === 401) { gAccessToken = null; localStorage.removeItem('gd_token'); updateDriveUI(); throw new Error('auth'); }
+  return res;
+}
+
+async function findOrCreateFile(name, content) {
+  // Search in appDataFolder
+  const search = await driveRequest('GET',
+    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${name}'&fields=files(id,name,modifiedTime)`);
+  const data = await search.json();
+  if (data.files && data.files.length > 0) return data.files[0].id;
+  // Create it
+  const meta = JSON.stringify({ name, parents: ['appDataFolder'] });
+  const blob = new Blob([content], { type: 'application/json' });
+  const form = new FormData();
+  form.append('metadata', new Blob([meta], { type: 'application/json' }));
+  form.append('file', blob);
+  const res = await driveRequest('POST',
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', form);
+  const created = await res.json();
+  return created.id;
+}
+
+async function readDriveFile(fileId) {
+  const res = await driveRequest('GET',
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+  return await res.json();
+}
+
+async function writeDriveFile(fileId, content) {
+  const blob = new Blob([JSON.stringify(content)], { type: 'application/json' });
+  await driveRequest('PATCH',
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, blob,
+    { 'Content-Type': 'application/json' });
+}
+
+async function syncWithDrive() {
+  if (!gAccessToken || isSyncing) return;
+  isSyncing = true;
+  setSyncStatus('syncing', 'Syncing…');
+  try {
+    // Get or create main data file
+    if (!driveMainFileId) {
+      const local = loadState();
+      const initContent = JSON.stringify({ v:1, updated: new Date().toISOString(), data: local });
+      driveMainFileId = await findOrCreateFile(DRIVE_FILE_NAME, initContent);
+    }
+    const remote = await readDriveFile(driveMainFileId);
+    const local = loadState();
+
+    // Merge: take union of all date keys, prefer whichever has more checked items
+    const merged = mergeStates(local, remote.data || {});
+    localStorage.setItem('habits_state', JSON.stringify(merged));
+    await writeDriveFile(driveMainFileId, { v:1, updated: new Date().toISOString(), data: merged });
+
+    const now = new Date();
+    setSyncStatus('ok', `Synced · ${now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`);
+    renderDaily();
+  } catch(e) {
+    if (e.message !== 'auth') setSyncStatus('error', 'Sync failed — will retry');
+  }
+  isSyncing = false;
+}
+
+function mergeStates(local, remote) {
+  const allKeys = new Set([...Object.keys(local), ...Object.keys(remote)]);
+  const merged = {};
+  allKeys.forEach(k => {
+    if (!local[k]) { merged[k] = remote[k]; return; }
+    if (!remote[k]) { merged[k] = local[k]; return; }
+    if (!k.startsWith('20')) { merged[k] = local[k]; return; } // week keys: keep local
+    // Day key: pick whichever has more completions
+    const lScore = scoreDay(local[k]);
+    const rScore = scoreDay(remote[k]);
+    merged[k] = lScore >= rScore ? local[k] : remote[k];
+  });
+  return merged;
+}
+
+function scoreDay(day) {
+  if (!day) return 0;
+  let s = 0;
+  DAILY_HABITS.forEach(h => { if (day.daily?.[h.id]) s++; });
+  if (day.morning) s++;
+  (day.dreams||[]).forEach(d => { if(d) s++; });
+  return s;
+}
+
+// ─── DRIVE BACKUPS ────────────────────────────────────────────────────────────
+async function saveDriveBackup(ts) {
+  if (!gAccessToken) return;
+  try {
+    const state = loadState();
+    const content = JSON.stringify({ v:1, ts, data: state });
+    const fileName = `${DRIVE_BACKUP_PREFIX}${ts.replace(/[:.]/g,'-')}.json`;
+    await findOrCreateFile(fileName, content);
+    // Prune old drive backups — keep only 5
+    const search = await driveRequest('GET',
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name contains '${DRIVE_BACKUP_PREFIX}'&fields=files(id,name,createdTime)&orderBy=createdTime`);
+    const data = await search.json();
+    const files = data.files || [];
+    if (files.length > MAX_BACKUPS) {
+      const toDelete = files.slice(0, files.length - MAX_BACKUPS);
+      for (const f of toDelete) {
+        await driveRequest('DELETE', `https://www.googleapis.com/drive/v3/files/${f.id}`);
+      }
+    }
+  } catch(e) { /* silent — local backup still saved */ }
+}
+
+// ─── BACKUP / EXPORT / IMPORT ─────────────────────────────────────────────────
+function exportData() {
+  const state = loadState();
+  const payload = { v:1, exported: new Date().toISOString(), data: state };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+}
+
+function openExport() {
+  document.getElementById('export-text').value = exportData();
+  document.getElementById('modal-export').classList.add('open');
+}
+
+function copyExport() {
+  const ta = document.getElementById('export-text');
+  ta.select();
+  navigator.clipboard.writeText(ta.value).catch(()=>{});
+  const btn = event.target;
+  btn.textContent = 'Copied!';
+  setTimeout(()=>btn.textContent='Copy to clipboard', 2000);
+}
+
+function openImport() {
+  document.getElementById('import-text').value = '';
+  document.getElementById('import-error').style.display = 'none';
+  document.getElementById('modal-import').classList.add('open');
+}
+
+function doImport() {
+  const raw = document.getElementById('import-text').value.trim();
+  const errEl = document.getElementById('import-error');
+  try {
+    const decoded = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    if (!decoded.data) throw new Error();
+    const current = loadState();
+    const merged = mergeStates(current, decoded.data);
+    saveState(merged);
+    closeModal('modal-import');
+    renderDaily();
+    showToast('Data imported ✓');
+  } catch(e) { errEl.style.display = 'block'; }
+}
+
+function saveBackup(auto=false) {
+  const blob = exportData();
+  const ts = new Date().toISOString();
+  const backups = JSON.parse(localStorage.getItem('habits_backups')||'[]');
+  backups.unshift({ ts, blob, auto, drive: !!gAccessToken, days: Object.keys(loadState()).filter(k=>k.startsWith('20')).length });
+  while (backups.length > MAX_BACKUPS) backups.pop();
+  localStorage.setItem('habits_backups', JSON.stringify(backups));
+  saveDriveBackup(ts); // also push to Drive if connected
+  if (!auto) showToast('Saved & backed up ✓');
+}
+
+function openBackups() {
+  const backups = JSON.parse(localStorage.getItem('habits_backups')||'[]');
+  const list = document.getElementById('backup-list');
+  list.innerHTML = '';
+  if (!backups.length) {
+    list.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);padding:12px 0;">No backups yet — click "Save & Backup" to create one.</div>`;
+  } else {
+    backups.forEach((b, i) => {
+      const d = new Date(b.ts);
+      const label = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})
+        + ' · ' + d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+      const autoBadge = b.auto
+        ? `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(126,184,247,0.12);color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;">auto</span>`
+        : `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(200,245,90,0.1);color:var(--accent);letter-spacing:0.06em;text-transform:uppercase;">manual</span>`;
+      const driveBadge = b.drive
+        ? `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(52,168,83,0.1);color:#34a853;letter-spacing:0.06em;text-transform:uppercase;">drive</span>`
+        : '';
+      const item = document.createElement('div');
+      item.className = 'backup-item';
+      item.innerHTML = `
+        <div class="backup-item-info">
+          <div class="backup-item-date">${label} ${autoBadge} ${driveBadge}</div>
+          <div class="backup-item-meta">${b.days} day${b.days!==1?'s':''} of data${i===0?' · most recent':i===backups.length-1?' · oldest':''}</div>
+        </div>
+        <button class="backup-restore-btn">Restore</button>
+      `;
+      item.querySelector('.backup-restore-btn').onclick = () => restoreBackup(i);
+      list.appendChild(item);
+    });
+    const rem = MAX_BACKUPS - backups.length;
+    list.insertAdjacentHTML('beforeend',
+      `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);padding:8px 2px;">${rem>0?rem+' slot'+(rem!==1?'s':'')+' remaining · oldest deleted when full':'At capacity — oldest replaced on next save'}</div>`);
+  }
+  document.getElementById('modal-backups').classList.add('open');
+}
+
+function restoreBackup(idx) {
+  if (!confirm('Restore this backup? Current data will be replaced.')) return;
+  const backups = JSON.parse(localStorage.getItem('habits_backups')||'[]');
+  try {
+    const decoded = JSON.parse(decodeURIComponent(escape(atob(backups[idx].blob))));
+    if (!decoded.data) throw new Error();
+    saveState(decoded.data);
+    closeModal('modal-backups');
+    renderDaily();
+    showToast('Backup restored ✓');
+  } catch(e) { alert('Could not restore this backup.'); }
+}
+
+// ─── AUTOSAVE ─────────────────────────────────────────────────────────────────
+function maybeAutosave() {
+  const last = localStorage.getItem('habits_last_autosave');
+  const todayDate = new Date().toDateString();
+  if (last !== todayDate) {
+    localStorage.setItem('habits_last_autosave', todayDate);
+    saveBackup(true);
+  }
+}
+function scheduleNightlyAutosave() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24,0,0,500);
+  setTimeout(() => {
+    saveBackup(true);
+    showToast('Nightly autosave ✓');
+    scheduleNightlyAutosave();
+  }, midnight - now);
+}
+
+// ─── RENDER: DAILY ────────────────────────────────────────────────────────────
+function renderDaily() {
+  const state = loadState();
+  const today = todayKey();
+  const day = getDay(state, today);
+  const week = getWeek(state, weekKey());
+
+  const hour = new Date().getHours();
+  document.getElementById('today-banner').textContent =
+    hour < 12 ? 'Good morning. Let\'s build a great day.' :
+    hour < 18 ? 'Afternoon check-in. How\'s the day going?' :
+    'Evening wind-down. Finish strong.';
+
+  document.getElementById('header-date').textContent =
+    new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}).toUpperCase();
+
+  // Daily habits
+  const dList = document.getElementById('daily-list');
+  dList.innerHTML = '';
+  let dChecked = 0;
+  DAILY_HABITS.forEach(h => {
+    const checked = !!day.daily[h.id];
+    if (checked) dChecked++;
+    const row = makeRow(h.name, h.meta, checked, 'tag-daily', 'daily');
+    row.onclick = () => {
+      const s = loadState(); const d = getDay(s, today);
+      d.daily[h.id] = !d.daily[h.id]; saveState(s); renderDaily();
+    };
+    dList.appendChild(row);
+  });
+  document.getElementById('daily-count').textContent = `${dChecked}/${DAILY_HABITS.length}`;
+
+  // Morning
+  const mList = document.getElementById('morning-list');
+  mList.innerHTML = '';
+  MORNING_OPTIONS.forEach(opt => {
+    const checked = day.morning === opt.id;
+    const row = makeRow(opt.name, '', checked, 'tag-daily', 'morning');
+    row.onclick = () => {
+      const s = loadState(); const d = getDay(s, today);
+      d.morning = d.morning === opt.id ? null : opt.id; saveState(s); renderDaily();
+    };
+    mList.appendChild(row);
+  });
+
+  // Dreams
+  const dSlots = document.getElementById('dream-slots');
+  dSlots.innerHTML = '';
+  let dreamCount = 0;
+  (day.dreams||[false,false,false]).forEach((checked, i) => {
+    if (checked) dreamCount++;
+    const row = document.createElement('div');
+    row.className = 'dream-row'+(checked?' checked':'');
+    row.innerHTML = `<div class="check-box">${checked?'<div class="check-icon"></div>':''}</div><span class="dream-label">Dream ${i+1} recorded</span>`;
+    row.onclick = () => {
+      const s = loadState(); const d = getDay(s, today);
+      if (!d.dreams) d.dreams=[false,false,false];
+      d.dreams[i] = !d.dreams[i]; saveState(s); renderDaily();
+    };
+    dSlots.appendChild(row);
+  });
+  document.getElementById('dream-count').textContent = `${dreamCount}/3`;
+
+  // Weekly on daily view
+  const wdList = document.getElementById('weekly-daily-list');
+  wdList.innerHTML = '';
+  WEEKLY_HABITS.forEach(h => {
+    if (h.id === 'dreams_3wk') return;
+    const val = week[h.id]||0;
+    const pct = Math.min(1, val/h.target);
+    const fillColor = pct>=1?'#c8f55a':pct>=0.5?'#ffb347':'#4a4845';
+    const row = makeRow(h.name, h.meta, pct>=1, 'tag-weekly', 'weekly');
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex;align-items:center;gap:8px;flex-shrink:0;';
+    right.innerHTML = `<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${Math.round(pct*100)}%;background:${fillColor}"></div></div><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);min-width:28px;text-align:right">${val}/${h.target}</span>`;
+    row.insertBefore(right, row.lastElementChild);
+    row.onclick = () => {
+      const s = loadState(); const w = getWeek(s, weekKey());
+      w[h.id] = (w[h.id]||0) >= h.target ? 0 : (w[h.id]||0)+1;
+      saveState(s); renderDaily(); renderWeekly && renderWeekly();
+    };
+    wdList.appendChild(row);
+  });
+
+  updateScore();
+}
+
+function makeRow(name, meta, checked, tagClass, tagLabel) {
+  const row = document.createElement('div');
+  row.className = 'habit-row'+(checked?' checked':'');
+  row.innerHTML = `
+    <div class="check-box">${checked?'<div class="check-icon"></div>':''}</div>
+    <div class="habit-info">
+      <div class="habit-name">${name}</div>
+      ${meta?`<div class="habit-meta">${meta}</div>`:''}
+    </div>
+    <span class="habit-tag ${tagClass}">${tagLabel}</span>
+  `;
+  return row;
+}
+
+function updateScore() {
+  const state = loadState();
+  const day = getDay(state, todayKey());
+  const week = getWeek(state, weekKey());
+  let total=0, done=0;
+  DAILY_HABITS.forEach(h=>{total++;if(day.daily[h.id])done++;});
+  total++;if(day.morning)done++;
+  (day.dreams||[]).forEach(d=>{total++;if(d)done++;});
+  WEEKLY_HABITS.forEach(h=>{if(h.id==='dreams_3wk')return;total++;if((week[h.id]||0)>=h.target)done++;});
+  document.getElementById('score-num').textContent = (total>0?Math.round(done/total*100):0)+'%';
+}
+
+// ─── RENDER: WEEKLY ───────────────────────────────────────────────────────────
+function renderWeekly() {
+  const state = loadState();
+  const week = getWeek(state, weekKey());
+  const grid = document.getElementById('weekly-grid');
+  grid.innerHTML = '';
+
+  WEEKLY_HABITS.forEach(h => {
+    const val = h.id==='dreams_3wk' ? countWeeklyDreams(state) : (week[h.id]||0);
+    const pct = Math.min(1, val/h.target);
+    const fillClass = pct>=1?'fill-green':pct>=0.5?'fill-amber':'fill-red';
+    const dots = Array.from({length:h.target},(_,i)=>
+      `<div class="week-dot${i<val?' filled':''}" data-i="${i}"></div>`).join('');
+    const card = document.createElement('div');
+    card.className = 'weekly-card';
+    card.innerHTML = `
+      <div class="weekly-card-title">${h.name}</div>
+      <div class="weekly-card-meta">${h.meta}</div>
+      <div class="weekly-progress">
+        <div class="weekly-progress-bar"><div class="weekly-progress-fill ${fillClass}" style="width:${Math.round(pct*100)}%"></div></div>
+        <span class="weekly-fraction">${val}/${h.target}</span>
+      </div>
+      <div class="weekly-dots">${dots}</div>
+    `;
+    card.querySelectorAll('.week-dot').forEach((dot,i)=>{
+      dot.onclick = e => {
+        e.stopPropagation();
+        if (h.id==='dreams_3wk') return;
+        const s=loadState(); const w=getWeek(s,weekKey());
+        w[h.id] = (w[h.id]||0)===i+1?i:i+1;
+        saveState(s); renderWeekly(); renderDaily();
+      };
+    });
+    grid.appendChild(card);
+  });
+
+  // Morning weekly
+  const morningDays = countWeeklyMornings(state);
+  const mPct = Math.min(1, morningDays/7);
+  const mFill = mPct>=1?'fill-green':mPct>=0.5?'fill-amber':'fill-red';
+  const mCard = document.createElement('div');
+  mCard.className = 'weekly-card';
+  mCard.innerHTML = `
+    <div class="weekly-card-title">Morning activity</div>
+    <div class="weekly-card-meta">yoga / surf / gym / bike / walk</div>
+    <div class="weekly-progress">
+      <div class="weekly-progress-bar"><div class="weekly-progress-fill ${mFill}" style="width:${Math.round(mPct*100)}%"></div></div>
+      <span class="weekly-fraction">${morningDays}/7</span>
+    </div>
+    <div class="weekly-dots">${Array.from({length:7},(_,i)=>`<div class="week-dot${i<morningDays?' filled':''}"></div>`).join('')}</div>
+  `;
+  grid.appendChild(mCard);
+}
+
+function countWeeklyDreams(state) {
+  const wk = weekKey();
+  return Object.keys(state).filter(k=>k.startsWith('20')&&getWeekOfDate(k)===wk)
+    .reduce((acc,k)=>acc+(state[k]?.dreams?.filter(Boolean).length||0),0);
+}
+function countWeeklyMornings(state) {
+  const wk = weekKey();
+  return Object.keys(state).filter(k=>k.startsWith('20')&&getWeekOfDate(k)===wk&&state[k]?.morning).length;
+}
+
+// ─── RENDER: STATS ────────────────────────────────────────────────────────────
+function renderStats() {
+  const state = loadState();
+  const days = Object.keys(state).filter(k=>k.startsWith('20')).sort();
+  const scores = days.map(d=>{
+    const day=state[d]||{}; let total=DAILY_HABITS.length+1+3,done=0;
+    DAILY_HABITS.forEach(h=>{if(day.daily?.[h.id])done++;});
+    if(day.morning)done++;
+    (day.dreams||[]).forEach(x=>{if(x)done++;});
+    return Math.round(done/total*100);
+  });
+  const avg = scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length):0;
+  const best = scores.length?Math.max(...scores):0;
+  const streak = calcStreak(state);
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-value stat-accent">${avg}%</div><div class="stat-label">Avg daily score</div></div>
+    <div class="stat-card"><div class="stat-value">${streak}</div><div class="stat-label">Current streak (days)</div></div>
+    <div class="stat-card"><div class="stat-value stat-amber">${best}%</div><div class="stat-label">Best day</div></div>
+    <div class="stat-card"><div class="stat-value stat-blue">${days.length}</div><div class="stat-label">Days tracked</div></div>
+  `;
+  const hm = document.getElementById('heatmap');
+  hm.innerHTML = '';
+  const today = new Date();
+  for (let i=27;i>=0;i--) {
+    const d=new Date(today); d.setDate(d.getDate()-i);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const score = state[key]?(()=>{
+      const day=state[key]; let total=DAILY_HABITS.length+1+3,done=0;
+      DAILY_HABITS.forEach(h=>{if(day.daily?.[h.id])done++;});
+      if(day.morning)done++;
+      (day.dreams||[]).forEach(x=>{if(x)done++;});
+      return Math.round(done/total*100);
+    })():0;
+    const cls=score===0?'':score<30?'h1':score<60?'h2':score<85?'h3':'h4';
+    const cell=document.createElement('div');
+    cell.className=`heatmap-cell ${cls}`; cell.title=`${key}: ${score}%`;
+    hm.appendChild(cell);
+  }
+}
+
+function calcStreak(state) {
+  const today = new Date(); let streak=0;
+  for (let i=0;i<365;i++) {
+    const d=new Date(today); d.setDate(d.getDate()-i);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if(!state[key]) break;
+    const day=state[key]; let done=0;
+    DAILY_HABITS.forEach(h=>{if(day.daily?.[h.id])done++;});
+    if(day.morning)done++;
+    if(done>=3)streak++; else break;
+  }
+  return streak;
+}
+
+// ─── WORKOUT ──────────────────────────────────────────────────────────────────
+const WORKOUT_TYPES = [
+  { id: 'legs',    label: 'Legs',    icon: '🦵' },
+  { id: 'push',    label: 'Push',    icon: '🏋️' },
+  { id: 'pull',    label: 'Pull',    icon: '💪' },
+  { id: 'surf',    label: 'Surf',    icon: '🏄' },
+  { id: 'climb',   label: 'Climb',   icon: '🧗' },
+  { id: 'bike',    label: 'Bike',    icon: '🚴' },
+  { id: 'cardio',  label: 'Cardio',  icon: '🏃' },
+];
+
+let selectedWorkoutType = null;
+let selectedRating = null;
+let gcalId = null; // cached Exercise calendar ID
+
+function renderWorkout() {
+  const grid = document.getElementById('workout-type-grid');
+  grid.innerHTML = '';
+  WORKOUT_TYPES.forEach(w => {
+    const btn = document.createElement('button');
+    btn.className = 'workout-type-btn' + (selectedWorkoutType === w.id ? ' selected' : '');
+    btn.innerHTML = `<span class="workout-type-icon">${w.icon}</span><span class="workout-type-label">${w.label}</span>`;
+    btn.onclick = () => selectWorkoutType(w.id);
+    grid.appendChild(btn);
+  });
+  renderWorkoutHistory();
+}
+
+function selectWorkoutType(id) {
+  selectedWorkoutType = id;
+  const w = WORKOUT_TYPES.find(x => x.id === id);
+  document.getElementById('workout-selected-name').textContent = w.icon + '  ' + w.label;
+  document.getElementById('workout-form').style.display = 'block';
+  document.getElementById('workout-cal-status').textContent = '';
+  document.getElementById('workout-cal-status').className = 'workout-cal-status';
+  renderWorkout();
+}
+
+function clearWorkoutSelection() {
+  selectedWorkoutType = null;
+  selectedRating = null;
+  document.getElementById('workout-form').style.display = 'none';
+  document.getElementById('workout-duration').value = '';
+  document.getElementById('workout-notes').value = '';
+  document.querySelectorAll('.rating-btn').forEach(b => b.classList.remove('selected'));
+  renderWorkout();
+}
+
+function setRating(val) {
+  selectedRating = val;
+  document.querySelectorAll('.rating-btn').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.dataset.val) === val);
+  });
+}
+
+async function logWorkout() {
+  if (!selectedWorkoutType) return;
+  const w = WORKOUT_TYPES.find(x => x.id === selectedWorkoutType);
+  const duration = parseInt(document.getElementById('workout-duration').value) || null;
+  const notes = document.getElementById('workout-notes').value.trim();
+  const ratingLabels = { 1: 'Easy', 2: 'Good', 3: 'Crushed it' };
+  const rating = selectedRating ? ratingLabels[selectedRating] : null;
+  const now = new Date();
+
+  const statusEl = document.getElementById('workout-cal-status');
+  const logBtn = document.querySelector('.workout-log-btn');
+  logBtn.disabled = true;
+  logBtn.textContent = 'Logging…';
+
+  // Build calendar event
+  const endTime = new Date(now.getTime() + (duration ? duration * 60000 : 3600000));
+  let description = '';
+  if (rating) description += `Felt: ${rating}\n`;
+  if (notes) description += notes;
+
+  // Auto-check habits
+  const state = loadState();
+  const day = getDay(state, todayKey());
+  day.daily['active_session'] = true;
+  if (now.getHours() < 11) {
+    // pick matching morning option if available
+    const morningMatch = { surf: 'morning_surf', bike: 'morning_bike' };
+    const gymTypes = ['legs', 'push', 'pull'];
+    if (morningMatch[selectedWorkoutType]) day.morning = morningMatch[selectedWorkoutType];
+    else if (gymTypes.includes(selectedWorkoutType)) day.morning = 'morning_gym';
+    else if (selectedWorkoutType === 'climb') day.morning = 'morning_gym';
+    else if (selectedWorkoutType === 'cardio') day.morning = 'morning_walk';
+    else day.morning = 'morning_walk';
+  }
+
+  // Save workout to local history
+  if (!state._workouts) state._workouts = [];
+  state._workouts.unshift({
+    id: Date.now(),
+    type: selectedWorkoutType,
+    ts: now.toISOString(),
+    duration,
+    notes,
+    rating: selectedRating,
+  });
+  if (state._workouts.length > 50) state._workouts.pop();
+  saveState(state);
+  renderDaily();
+
+  // Push to Google Calendar
+  if (!gAccessToken) {
+    statusEl.textContent = '✓ Logged locally (connect Drive/Calendar to sync)';
+    statusEl.className = 'workout-cal-status info';
+  } else {
+    try {
+      statusEl.textContent = 'Finding Exercise calendar…';
+      statusEl.className = 'workout-cal-status info';
+      const calId = await getExerciseCalendarId();
+      if (!calId) throw new Error('Exercise calendar not found');
+
+      const event = {
+        summary: `${w.icon} ${w.label}`,
+        description: description || undefined,
+        start: { dateTime: now.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        end:   { dateTime: endTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      };
+      const res = await driveRequest('POST',
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
+        event);
+      if (!res.ok) throw new Error('Calendar API error');
+      statusEl.textContent = '✓ Added to Exercise calendar';
+      statusEl.className = 'workout-cal-status ok';
+    } catch(e) {
+      statusEl.textContent = '✓ Logged locally — calendar sync failed: ' + e.message;
+      statusEl.className = 'workout-cal-status err';
+    }
+  }
+
+  logBtn.disabled = false;
+  logBtn.textContent = 'Log another workout → Calendar';
+  renderWorkoutHistory();
+}
+
+async function getExerciseCalendarId() {
+  if (gcalId) return gcalId;
+  const res = await driveRequest('GET', 'https://www.googleapis.com/calendar/v3/users/me/calendarList');
+  const data = await res.json();
+  const cal = (data.items || []).find(c => c.summary === 'Exercise');
+  if (cal) { gcalId = cal.id; return gcalId; }
+  return null;
+}
+
+function renderWorkoutHistory() {
+  const state = loadState();
+  const workouts = state._workouts || [];
+  const container = document.getElementById('workout-history');
+  if (!container) return;
+  if (!workouts.length) {
+    container.innerHTML = '<div class="workout-history-empty">No workouts logged yet.</div>';
+    return;
+  }
+  const ratingLabels = { 1: '😴 Easy', 2: '💪 Good', 3: '🔥 Crushed it' };
+  container.innerHTML = workouts.slice(0, 10).map(w => {
+    const type = WORKOUT_TYPES.find(t => t.id === w.type) || { icon: '?', label: w.type };
+    const d = new Date(w.ts);
+    const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })
+      + ' · ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+    const meta = [
+      w.duration ? `${w.duration} min` : null,
+      w.rating ? ratingLabels[w.rating] : null,
+      w.notes ? `"${w.notes.slice(0,40)}${w.notes.length>40?'…':''}"` : null,
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="workout-history-item">
+        <span class="workout-history-icon">${type.icon}</span>
+        <div class="workout-history-info">
+          <div class="workout-history-name">${type.label}</div>
+          <div class="workout-history-meta">${dateStr}${meta ? ' · ' + meta : ''}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── NAV / UTILS ──────────────────────────────────────────────────────────────
+function showView(name, e) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if(e) e.target.classList.add('active');
+  if(name==='weekly') renderWeekly();
+  if(name==='stats') renderStats();
+  if(name==='workout') renderWorkout();
+}
+function confirmReset() {
+  if(!confirm('Reset all of today\'s check-ins?')) return;
+  const s=loadState(); delete s[todayKey()]; saveState(s); renderDaily();
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function toggleDataMenu() {
+  document.getElementById('data-menu').classList.toggle('open');
+}
+function closeDataMenu() {
+  document.getElementById('data-menu').classList.remove('open');
+}
+document.addEventListener('click', e => {
+  const wrap = document.querySelector('.dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) closeDataMenu();
+});
+function showToast(msg) {
+  const t=document.getElementById('save-toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+document.querySelectorAll('.modal-overlay').forEach(el=>{
+  el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');});
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+loadTokenFromStorage();
+renderDaily();
+maybeAutosave();
+scheduleNightlyAutosave();
+if (gAccessToken) syncWithDrive();
+</script>
+</body>
+</html>
